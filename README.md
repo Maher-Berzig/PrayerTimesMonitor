@@ -72,7 +72,7 @@ Configuration is stored automatically:
 
 ## Built-in Cities
 
-- Mecca (🕋 protected, cannot be deleted)
+- Mecca (🕋 default)
 - Cairo, Algiers, Amman, Baghdad, Bahrain
 - Beirut, Damascus, Doha, Kuwait City
 - Muscat, Riyadh, Sanaa, Tunis
