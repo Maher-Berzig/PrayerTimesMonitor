@@ -15,6 +15,57 @@ import warnings
 import requests
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+# ── Windows startup registry helpers ─────────────────────────────────────────
+_STARTUP_REG_KEY  = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_STARTUP_APP_NAME = "PrayerTimesMonitor"
+
+
+def _get_app_exe_path():
+    """Return the command that should be written to the registry."""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller bundle: point directly at the .exe
+        return sys.executable
+    else:
+        # Plain .py script: call the current Python interpreter
+        return f'"{sys.executable}" "{os.path.abspath(__file__)}"'
+
+
+def get_startup_enabled():
+    """Return True if the app is registered to run at Windows startup."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY, 0,
+                             winreg.KEY_READ)
+        winreg.QueryValueEx(key, _STARTUP_APP_NAME)
+        winreg.CloseKey(key)
+        return True
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def set_startup_enabled(enable: bool):
+    """Add or remove the app from the Windows startup registry key."""
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY, 0,
+                             winreg.KEY_SET_VALUE)
+        if enable:
+            winreg.SetValueEx(key, _STARTUP_APP_NAME, 0,
+                              winreg.REG_SZ, _get_app_exe_path())
+        else:
+            try:
+                winreg.DeleteValue(key, _STARTUP_APP_NAME)
+            except FileNotFoundError:
+                pass
+        winreg.CloseKey(key)
+    except Exception:
+        pass
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 # -------------------------------
 # PrayTimes Class (from TimeToPray.py)
@@ -426,6 +477,7 @@ TRANSLATIONS = {
         'prayer_calc_credit': 'uses the Prayer Times Calculator algorithm',
         'license': 'License',
         'license_text': 'This software is free to use and distribute.',
+        'startup_windows': 'Launch automatically with Windows',
     },
     'fr': {
         'author_name':'Maher Berzig',
@@ -538,6 +590,7 @@ TRANSLATIONS = {
         'prayer_calc_credit': 'utilise l\'algorithme Prayer Times Calculator',
         'license': 'Licence',
         'license_text': 'Ce logiciel est libre d\'utilisation et de distribution.',
+        'startup_windows': 'Lancer automatiquement avec Windows',
     },
     'ar': {
         'author_name':'ماهر برزيق',
@@ -649,7 +702,8 @@ TRANSLATIONS = {
         'credits': 'الإسهامات',
         'prayer_calc_credit': 'يستخدم خوارزمية حاسبة أوقات الصلاة',
         'license': 'الترخيص',
-        'license_text': 'هذا البرنامج مجاني للاستخدام والتوزيع.',        
+        'license_text': 'هذا البرنامج مجاني للاستخدام والتوزيع.',
+        'startup_windows': 'التشغيل التلقائي مع ويندوز',
     }
 }
 
@@ -1302,7 +1356,7 @@ class SettingsDialog(QDialog):
         self.current_language = config.get('language', 'en')
         
         self.setWindowTitle(self.lang['settings'])
-        self.setFixedSize(400, 350)
+        self.setFixedSize(400, 390)
         self.setWindowIcon(QIcon("PrayerTimesMonitor.png"))
         
         if self.current_language == 'ar':
@@ -1341,7 +1395,15 @@ class SettingsDialog(QDialog):
         layout.addRow(self.lang['time_format'] + ":", self.time_format_combo)
         layout.addRow(self.lang['notification_duration'] + ":", self.duration_spin)
         layout.addRow(self.lang['show_notification'] + ":", self.show_notif_check)
-        
+
+        # ── Windows startup ───────────────────────────────────────────────────
+        if sys.platform == "win32":
+            self.startup_check = QCheckBox(self.lang.get('startup_windows',
+                                           'Launch automatically with Windows'))
+            self.startup_check.setChecked(get_startup_enabled())
+            layout.addRow(self.startup_check)
+        # ─────────────────────────────────────────────────────────────────────
+
         # Add separator
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
@@ -1391,6 +1453,12 @@ class SettingsDialog(QDialog):
         self.config.set('time_format', self.time_format_combo.currentData())
         self.config.set('notification_duration', self.duration_spin.value())
         self.config.set('show_notification', self.show_notif_check.isChecked())
+
+        # ── Windows startup ───────────────────────────────────────────────────
+        if sys.platform == "win32" and hasattr(self, 'startup_check'):
+            set_startup_enabled(self.startup_check.isChecked())
+        # ─────────────────────────────────────────────────────────────────────
+
         self.accept()
      
 
